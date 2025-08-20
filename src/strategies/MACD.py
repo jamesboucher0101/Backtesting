@@ -1,13 +1,16 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 import pandas as pd
 import numpy as np
-import random
+import itertools
 from .base import Strategy
 
 MACD_PARAMS = {
     'fast_length_range': (5, 50),     
+    'fast_length_step': 2,
     'slow_length_range': (20, 100),    
-    'signal_length_range': (5, 50),   
+    'slow_length_step': 3,
+    'signal_length_range': (5, 50),
+    'signal_length_step': 2,
 }
 
 
@@ -25,22 +28,57 @@ class MACDStrategy(Strategy):
     def name(self) -> str:
         return "MACD"
 
-    def suggest_parameters(self) -> Dict[str, Any]:
-        """Suggest parameters for optimization trials"""
-        # Get base parameters from config
-        fast_length = random.randint(*MACD_PARAMS['fast_length_range'])
-        slow_length = random.randint(*MACD_PARAMS['slow_length_range'])
-        signal_length = random.randint(*MACD_PARAMS['signal_length_range'])
+    def suggest_parameters(self, trial=None) -> Dict[str, Any]:
+        """
+        Suggest parameters for optimization trials.
         
-        # Ensure fast_length is always less than slow_length
-        if fast_length >= slow_length:
-            fast_length, slow_length = slow_length - 1, fast_length + 1
+        Note: This method is now mainly for compatibility. Parameter combinations 
+        are generated externally in parameter_combinations.py
         
+        Args:
+            trial: Optional trial parameter for compatibility with optimization frameworks.
+        """
+        # Return default parameters for compatibility
         return {
-            'fast_length': fast_length,
-            'slow_length': slow_length,
-            'signal_length': signal_length
+            'fast_length': 12,
+            'slow_length': 26,
+            'signal_length': 9
         }
+
+    @classmethod
+    def get_parameter_combinations(cls) -> List[Dict[str, Any]]:
+        """
+        Generate all parameter combinations for MACD strategy.
+        
+        Returns:
+            List of parameter dictionaries for MACD strategy
+        """
+        # Use MACD_PARAMS configuration
+        fast_min, fast_max = MACD_PARAMS['fast_length_range']
+        fast_step = MACD_PARAMS['fast_length_step']
+        slow_min, slow_max = MACD_PARAMS['slow_length_range']
+        slow_step = MACD_PARAMS['slow_length_step']
+        signal_min, signal_max = MACD_PARAMS['signal_length_range']
+        signal_step = MACD_PARAMS['signal_length_step']
+        
+        # Generate ranges with configurable steps
+        fast_length_range = range(fast_min, fast_max + 1, fast_step)
+        slow_length_range = range(slow_min, slow_max + 1, slow_step)
+        signal_length_range = range(signal_min, signal_max + 1, signal_step)
+        
+        combinations = []
+        for fast_length, slow_length, signal_length in itertools.product(
+            fast_length_range, slow_length_range, signal_length_range
+        ):
+            # Ensure fast_length < slow_length
+            if fast_length < slow_length:
+                combinations.append({
+                    'fast_length': fast_length,
+                    'slow_length': slow_length,
+                    'signal_length': signal_length
+                })
+        
+        return combinations
 
     def prepare(self, df: pd.DataFrame, params: Dict[str, Any]) -> pd.DataFrame:
         """Prepare the dataframe with MACD indicators"""

@@ -1,12 +1,14 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 import pandas as pd
 import numpy as np
-import random
+import itertools
 from .base import Strategy
 
 MOVINGAVG2LINE_PARAMS = {
     'fast_length_range': (3, 100),    # Fast SMA period (default 9 in Pine Script)
+    'fast_length_step': 2,
     'slow_length_range': (5, 100),   # Slow SMA period (default 18 in Pine Script)
+    'slow_length_step': 3,
 }
 
 
@@ -24,21 +26,50 @@ class MovingAvg2LineStrategy(Strategy):
     def name(self) -> str:
         return "MovingAvg2Line"
 
-    def suggest_parameters(self) -> Dict[str, Any]:
-        """Suggest parameters for optimization trials"""
-        # Get base parameters from config
-        fast_min, fast_max = MOVINGAVG2LINE_PARAMS['fast_length_range']
-        slow_min, slow_max = MOVINGAVG2LINE_PARAMS['slow_length_range']
+    def suggest_parameters(self, trial=None) -> Dict[str, Any]:
+        """
+        Suggest parameters for optimization trials.
         
-        # Generate parameters ensuring fast < slow
-        fast_length = random.randint(fast_min, fast_max)
-        # Ensure slow_length is always greater than fast_length
-        slow_length = random.randint(max(slow_min, fast_length + 1), slow_max)
+        Note: This method is now mainly for compatibility. Parameter combinations 
+        are generated externally in parameter_combinations.py
         
+        Args:
+            trial: Optional trial parameter for compatibility with optimization frameworks.
+        """
+        # Return default parameters for compatibility
         return {
-            'fast_length': fast_length,
-            'slow_length': slow_length
+            'fast_length': 9,
+            'slow_length': 18
         }
+
+    @classmethod
+    def get_parameter_combinations(cls) -> List[Dict[str, Any]]:
+        """
+        Generate all parameter combinations for MovingAvg2Line strategy.
+        
+        Returns:
+            List of parameter dictionaries for MovingAvg2Line strategy
+        """
+        # Use MOVINGAVG2LINE_PARAMS configuration
+        fast_min, fast_max = MOVINGAVG2LINE_PARAMS['fast_length_range']
+        fast_step = MOVINGAVG2LINE_PARAMS['fast_length_step']
+        slow_min, slow_max = MOVINGAVG2LINE_PARAMS['slow_length_range']
+        slow_step = MOVINGAVG2LINE_PARAMS['slow_length_step']
+        
+        # Generate ranges with configurable steps
+        fast_length_range = range(fast_min, fast_max + 1, fast_step)
+        slow_length_range = range(slow_min, slow_max + 1, slow_step)
+        
+        combinations = []
+        for fast_length, slow_length in itertools.product(fast_length_range, slow_length_range):
+            # Ensure fast_length < slow_length
+            if fast_length < slow_length:
+                combinations.append({
+                    'fast_length': fast_length,
+                    'slow_length': slow_length
+                })
+        
+        return combinations
 
     def prepare(self, df: pd.DataFrame, params: Dict[str, Any]) -> pd.DataFrame:
         """Prepare the dataframe with dual Moving Average indicators"""

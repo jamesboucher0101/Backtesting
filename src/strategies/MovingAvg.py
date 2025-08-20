@@ -1,12 +1,14 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 import pandas as pd
 import numpy as np
-import random
+import itertools
 from .base import Strategy
 
 MOVINGAVG_PARAMS = {
     'length_range': (5, 100),
+    'length_step': 3,
     'confirm_bars_range': (1, 100),
+    'confirm_bars_step': 2,
 }
 
 
@@ -24,16 +26,48 @@ class MovingAvgStrategy(Strategy):
     def name(self) -> str:
         return "MovingAvg"
 
-    def suggest_parameters(self) -> Dict[str, Any]:
-        """Suggest parameters for optimization trials"""
-        # Get base parameters from config
-        length = random.randint(*MOVINGAVG_PARAMS['length_range'])
-        confirm_bars = random.randint(*MOVINGAVG_PARAMS['confirm_bars_range'])
+    def suggest_parameters(self, trial=None) -> Dict[str, Any]:
+        """
+        Suggest parameters for optimization trials.
         
+        Note: This method is now mainly for compatibility. Parameter combinations 
+        are generated externally in parameter_combinations.py
+        
+        Args:
+            trial: Optional trial parameter for compatibility with optimization frameworks.
+        """
+        # Return default parameters for compatibility
         return {
-            'length': length,
-            'confirm_bars': confirm_bars
+            'length': 20,
+            'confirm_bars': 2
         }
+
+    @classmethod
+    def get_parameter_combinations(cls) -> List[Dict[str, Any]]:
+        """
+        Generate all parameter combinations for MovingAvg strategy.
+        
+        Returns:
+            List of parameter dictionaries for MovingAvg strategy
+        """
+        # Use MOVINGAVG_PARAMS configuration
+        length_min, length_max = MOVINGAVG_PARAMS['length_range']
+        length_step = MOVINGAVG_PARAMS['length_step']
+        confirm_bars_min, confirm_bars_max = MOVINGAVG_PARAMS['confirm_bars_range']
+        confirm_bars_step = MOVINGAVG_PARAMS['confirm_bars_step']
+        
+        # Generate ranges with configurable steps
+        length_range = range(length_min, length_max + 1, length_step)
+        confirm_bars_range = range(confirm_bars_min, confirm_bars_max + 1, confirm_bars_step)
+        
+        combinations = []
+        for length, confirm_bars in itertools.product(length_range, confirm_bars_range):
+            combinations.append({
+                'length': length,
+                'confirm_bars': confirm_bars
+            })
+        
+        return combinations
 
     def prepare(self, df: pd.DataFrame, params: Dict[str, Any]) -> pd.DataFrame:
         """Prepare the dataframe with Moving Average indicators"""

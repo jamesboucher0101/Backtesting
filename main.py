@@ -9,19 +9,19 @@ import os
 
 
 def run_backtest_worker(args):
-    """Worker function to run a single backtest"""
-    strategy, exchange, trading_pair, timeframe = args
+    """Worker function to run a single backtest with single parameter set"""
+    strategy, exchange, trading_pair, timeframe, single_params = args
     try:
-        simulate_backtest(strategy, exchange, trading_pair, timeframe)
-        return f"Success: {strategy.name} on {exchange} {trading_pair} {timeframe}"
+        simulate_backtest(strategy, exchange, trading_pair, timeframe, single_params)
+        return f"Success: {strategy.name} on {exchange} {trading_pair} {timeframe} - params: {single_params}"
     except Exception as e:
-        return f"Error: {strategy.name} on {exchange} {trading_pair} {timeframe} - {str(e)}"
+        return f"Error: {strategy.name} on {exchange} {trading_pair} {timeframe} - params: {single_params} - {str(e)}"
 
 
 def main():
     exchanges = [
         'blofin',
-        'bitget'
+        # 'bitget'
     ]
     trading_pairs = [
         'FARTCOIN/USDT',
@@ -56,10 +56,24 @@ def main():
     print(f"Using {num_cores} CPU cores for parallel processing")
 
     while True:
-        # Generate all combinations of parameters
-        combinations = list(itertools.product(strategies, exchanges, trading_pairs, timeframes))
+        # Generate individual jobs for each parameter combination
+        print("Generating individual backtest jobs...")
         
-        print(f"Running {len(combinations)} backtests in parallel...")
+        combinations = []
+        total_param_combinations = 0
+        
+        for strategy in strategies:
+            param_combos = strategy.get_parameter_combinations()
+            total_param_combinations += len(param_combos)
+            print(f"{strategy.name}: {len(param_combos)} parameter combinations")
+            
+            # Create individual job for each parameter combination
+            for single_params in param_combos:
+                for exchange, trading_pair, timeframe in itertools.product(exchanges, trading_pairs, timeframes):
+                    combinations.append((strategy, exchange, trading_pair, timeframe, single_params))
+        
+        print(f"Generated {len(combinations)} individual backtest jobs from {total_param_combinations} parameter combinations")
+        print(f"Each job will run a single backtest with one parameter set")
         
         # Create a process pool and run backtests in parallel
         with mp.Pool(processes=num_cores) as pool:

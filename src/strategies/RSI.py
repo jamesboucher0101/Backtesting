@@ -1,12 +1,15 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 import pandas as pd
-import random
+import itertools
 from .base import Strategy
 
 RSI_PARAMS = {
     'length_range': (5, 15), 
+    'length_step': 1,
     'oversold_range': (10, 40),    
-    'overbought_range': (60, 90),  
+    'oversold_step': 2,
+    'overbought_range': (60, 90),
+    'overbought_step': 2,
 }
 
 class RSIStrategy(Strategy):
@@ -21,18 +24,53 @@ class RSIStrategy(Strategy):
     def name(self) -> str:
         return "RSI"
 
-    def suggest_parameters(self) -> Dict[str, Any]:
-        """Suggest parameters for optimization trials"""
-        # Get base parameters
-        length = random.randint(*RSI_PARAMS['length_range'])
-        oversold = random.randint(*RSI_PARAMS['oversold_range'])
-        overbought = random.randint(*RSI_PARAMS['overbought_range'])
+    def suggest_parameters(self, trial=None) -> Dict[str, Any]:
+        """
+        Suggest parameters for optimization trials.
         
+        Note: This method is now mainly for compatibility. Parameter combinations 
+        are generated externally in parameter_combinations.py
+        
+        Args:
+            trial: Optional trial parameter for compatibility with optimization frameworks.
+        """
+        # Return default parameters for compatibility
         return {
-            'length': length,
-            'oversold': oversold,
-            'overbought': overbought
+            'length': 14,
+            'oversold': 30,
+            'overbought': 70
         }
+
+    @classmethod
+    def get_parameter_combinations(cls) -> List[Dict[str, Any]]:
+        """
+        Generate all parameter combinations for RSI strategy.
+        
+        Returns:
+            List of parameter dictionaries for RSI strategy
+        """
+        # Use RSI_PARAMS configuration
+        length_min, length_max = RSI_PARAMS['length_range']
+        length_step = RSI_PARAMS['length_step']
+        oversold_min, oversold_max = RSI_PARAMS['oversold_range']
+        oversold_step = RSI_PARAMS['oversold_step']
+        overbought_min, overbought_max = RSI_PARAMS['overbought_range']
+        overbought_step = RSI_PARAMS['overbought_step']
+        
+        # Generate ranges with configurable steps
+        length_range = range(length_min, length_max + 1, length_step)
+        oversold_range = range(oversold_min, oversold_max + 1, oversold_step)
+        overbought_range = range(overbought_min, overbought_max + 1, overbought_step)
+        
+        combinations = []
+        for length, oversold, overbought in itertools.product(length_range, oversold_range, overbought_range):
+            combinations.append({
+                'length': length,
+                'oversold': oversold,
+                'overbought': overbought
+            })
+        
+        return combinations
 
     def prepare(self, df: pd.DataFrame, params: Dict[str, Any]) -> pd.DataFrame:
         """Prepare the dataframe with RSI indicator"""

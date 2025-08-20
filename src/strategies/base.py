@@ -16,8 +16,14 @@ class Strategy(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def suggest_parameters(self, trial) -> Dict[str, Any]:
-        """Suggest parameters for optimization trials"""
+    def suggest_parameters(self, trial=None) -> Dict[str, Any]:
+        """
+        Suggest parameters for optimization trials.
+        
+        Args:
+            trial: Optional trial parameter for compatibility with optimization frameworks.
+                   When None, strategies should use their own parameter generation logic.
+        """
         pass
 
     @abc.abstractmethod

@@ -61,14 +61,43 @@ def load_data(exchange, trading_pair, timeframe):
     return resampled_df
 
 
-def simulate_backtest(strategy, exchange, trading_pair, timeframe, initial_capital=10000, commission_rate=0.0006, position_fraction=0.10):
-    df = load_data(exchange, trading_pair, timeframe)    
-    params = strategy.suggest_parameters()
+def simulate_backtest(strategy, exchange, trading_pair, timeframe, single_params=None, initial_capital=10000, commission_rate=0.0006, position_fraction=0.10):
+    """
+    Run backtest for a strategy with a single parameter set.
+    
+    Args:
+        strategy: Strategy instance
+        exchange: Exchange name
+        trading_pair: Trading pair
+        timeframe: Timeframe
+        single_params: Single parameter dictionary to test. If None, uses strategy.suggest_parameters()
+        initial_capital: Initial capital
+        commission_rate: Commission rate
+        position_fraction: Position fraction
+    """
+    df = load_data(exchange, trading_pair, timeframe)
+    
+    # If no parameters provided, use default parameters (fallback)
+    if single_params is None:
+        single_params = strategy.suggest_parameters()
     
     print ("-" * 50)
     print (f"Backtesting {strategy.name} on {exchange} {trading_pair} {timeframe}")
-    print (f"Parameters: {params}")
+    print (f"Parameters: {single_params}")
+    
+    # Run single backtest with these parameters
+    run_single_backtest(strategy, df, single_params, exchange, trading_pair, timeframe, 
+                       initial_capital, commission_rate, position_fraction)
 
+
+def run_single_backtest(strategy, df, params, exchange, trading_pair, timeframe, 
+                       initial_capital=10000, commission_rate=0.0006, position_fraction=0.10):
+    """
+    Run a single backtest with specific parameters.
+    
+    This function contains the core backtesting logic.
+    """
+    # Prepare the dataframe with strategy indicators
     df = strategy.prepare(df.copy(), params)
     df['position'] = 0
     df['equity'] = float(initial_capital)  # Ensure float dtype to avoid pandas warning
@@ -226,12 +255,10 @@ def simulate_backtest(strategy, exchange, trading_pair, timeframe, initial_capit
     
     final_equity = df['equity'].iloc[-1] if 'equity' in df.columns and not df.empty else initial_capital
 
-
     # Calculate required metrics
     total_days = (df.index[-1] - df.index[0]).days
     weeks_tested = total_days / 7.0
     avg_trades_per_week = len(trades) / weeks_tested if weeks_tested > 0 else 0
-    
 
     # Profit calculation
     profit = final_equity - initial_capital
@@ -290,7 +317,6 @@ def simulate_backtest(strategy, exchange, trading_pair, timeframe, initial_capit
     else:
         sharpe_ratio = 0
 
-    
     # Number of trades
     num_trades = len(trades)
 
@@ -337,4 +363,3 @@ def simulate_backtest(strategy, exchange, trading_pair, timeframe, initial_capit
             csv_content += f',{equity_dd_pct:.2f},{num_trades}'
             csv_content += ',' + ','.join(f"{v}" for k, v in params.items())
             csvfile.write(csv_content + "\n")
-    
