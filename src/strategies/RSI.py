@@ -51,7 +51,8 @@ class RSIStrategy(Strategy):
         return out
 
     def warmup_period(self, params: Dict[str, Any]) -> int:
-        return 0
+        # The RSI indicator requires 'length' periods to produce its first value.
+        return int(params.get('length', 14))
 
     def decide_position(self, df: pd.DataFrame, i: int, prev_position: int, params: Dict[str, Any]) -> int:
         """Decide position based on basic RSI cross signals"""

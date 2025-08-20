@@ -154,7 +154,7 @@ def main():
     parser = argparse.ArgumentParser(description='Download historical candlestick data from exchanges')
     parser.add_argument('--start-date', type=str, default='2025-08-01', 
                        help='Start date in YYYY-MM-DD format')
-    parser.add_argument('--end-date', type=str, default='2025-08-16', 
+    parser.add_argument('--end-date', type=str, default='2025-08-18', 
                        help='End date in YYYY-MM-DD format')
     parser.add_argument('--timeframe', type=str, default='1m', 
                        help='Timeframe for data (1m, 5m, 1h, etc.)')
@@ -171,16 +171,16 @@ def main():
     
     # Trading pairs to download (based on config.py)
     trading_pairs = [
-        # 'AERO/USDT:USDT',
-        # 'BTC/USDT:USDT',
+        'AERO/USDT:USDT',
+        'BTC/USDT:USDT',
         'FARTCOIN/USDT:USDT',
-        # 'PEPE/USDT:USDT',
-        # 'POPCAT/USDT:USDT',
-        # 'ETH/USDT:USDT', 
-        # 'SOL/USDT:USDT',
-        # 'DOGE/USDT:USDT',
-        # 'GOAT/USDT:USDT',
-        # 'SUI/USDT:USDT'
+        'PEPE/USDT:USDT',
+        'POPCAT/USDT:USDT',
+        'ETH/USDT:USDT', 
+        'SOL/USDT:USDT',
+        'DOGE/USDT:USDT',
+        'GOAT/USDT:USDT',
+        'SUI/USDT:USDT'
     ]
     
     # Exchange configurations
@@ -190,7 +190,7 @@ def main():
             'api_key': None,
             'secret': None,
             'sandbox': False,
-            'enabled': False,
+            'enabled': True,
         },
         'blofin': {
             'name': 'blofin',

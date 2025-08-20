@@ -5,9 +5,9 @@ import random
 from .base import Strategy
 
 MACD_PARAMS = {
-    'fast_length_range': (8, 16),     
-    'slow_length_range': (20, 32),    
-    'signal_length_range': (6, 12),   
+    'fast_length_range': (5, 50),     
+    'slow_length_range': (20, 100),    
+    'signal_length_range': (5, 50),   
 }
 
 
