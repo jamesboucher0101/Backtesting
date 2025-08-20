@@ -21,7 +21,7 @@ def run_backtest_worker(args):
 def main():
     exchanges = [
         'blofin',
-        # 'bitget'
+        'bitget'
     ]
     trading_pairs = [
         'FARTCOIN/USDT',
@@ -37,11 +37,11 @@ def main():
     ]
     timeframes = [
         '5m',
-        # '10m',
-        # '15m',
-        # '30m',
-        # '1h',
-        # '2h'
+        '10m',
+        '15m',
+        '30m',
+        '1h',
+        '2h'
     ]
 
     strategies = [

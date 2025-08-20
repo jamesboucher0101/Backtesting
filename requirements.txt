@@ -1,0 +1,12 @@
+# Core data analysis and manipulation
+pandas>=2.0.0
+
+# Technical analysis library for trading indicators
+# Note: TA-Lib requires system-level dependencies to be installed first
+# On Ubuntu/Debian: sudo apt-get install build-essential libta-lib-dev
+# On macOS: brew install ta-lib
+# On Windows: Download from https://www.lfd.uci.edu/~gohlke/pythonlibs/#ta-lib
+TA-Lib>=0.4.25
+
+# Numerical computing
+numpy>=1.24.0
