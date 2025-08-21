@@ -320,14 +320,14 @@ def run_single_backtest(strategy, df, params, exchange, trading_pair, timeframe,
     # Number of trades
     num_trades = len(trades)
 
-    print (f"Backtest result:\n Final Equity: {final_equity} \n Max Drawdown: {equity_dd_pct:.2f}% \n Num trades: {num_trades}")
-    print (f"Profit: {profit} ({profit_pct}%)")
-    print (f"Weeks Tested: {weeks_tested}, Avg Trades/Week: {avg_trades_per_week}")
-    print (f"Expected Payoff: {expected_payoff}, Profit Factor: {profit_factor}")
-    print (f"Recovery Factor: {recovery_factor}, Sharpe Ratio: {sharpe_ratio}")
+    # print (f"Backtest result:\n Final Equity: {final_equity} \n Max Drawdown: {equity_dd_pct:.2f}% \n Num trades: {num_trades}")
+    # print (f"Profit: {profit} ({profit_pct}%)")
+    # print (f"Weeks Tested: {weeks_tested}, Avg Trades/Week: {avg_trades_per_week}")
+    # print (f"Expected Payoff: {expected_payoff}, Profit Factor: {profit_factor}")
+    # print (f"Recovery Factor: {recovery_factor}, Sharpe Ratio: {sharpe_ratio}")
     
-    if trades:
-        print (trades[0])
+    # if trades:
+    #     print (trades[0])
     
     if equity_dd_pct > (OPTIMIZATION_CONFIG['max_drawdown_limit'] * 100):
         return

@@ -4,12 +4,12 @@ import itertools
 from .base import Strategy
 
 RSI_PARAMS = {
-    'length_range': (5, 15), 
-    'length_step': 1,
-    'oversold_range': (10, 40),    
-    'oversold_step': 2,
-    'overbought_range': (60, 90),
-    'overbought_step': 2,
+    'length_range': (5, 30), 
+    'length_step': 2,
+    'oversold_range': (20, 40),    
+    'oversold_step': 3,
+    'overbought_range': (60, 80),
+    'overbought_step': 3,
 }
 
 class RSIStrategy(Strategy):
