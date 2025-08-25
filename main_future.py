@@ -53,12 +53,12 @@ def main():
     ]
 
     timeframes = [
-        # '5m',
-        # '10m',
-        # '15m',
+        '5m',
+        '10m',
+        '15m',
         '30m',
-        # '1h',
-        # '2h'
+        '1h',
+        '2h'
     ]
 
     strategies = [

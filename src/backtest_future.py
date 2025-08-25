@@ -95,10 +95,6 @@ def run_single_backtest_future(strategy, df, params, symbol, timeframe,
                       - Short exits: pay higher by tick_slippage ticks
     """
     
-    params["length"] = 5
-    params["oversold"] = 20
-    params["overbought"] = 60
-    
     # Prepare the dataframe with strategy indicators
     df = strategy.prepare(df.copy(), params)
     df['position'] = 0
@@ -131,12 +127,13 @@ def run_single_backtest_future(strategy, df, params, symbol, timeframe,
             # If changing position, close existing one first
             if position > 0 and desired_position <= 0:
                 # Apply tick slippage for long exit (unfavorable = lower price)
-                exit_price = base_execution_price + 0.25 * tick_slippage
+                exit_price = base_execution_price - 0.25 * tick_slippage
                 qty = position_qty
                 # Calculate commission on execution price
                 commission_entry = entry_execution_price * qty * commission_rate  # Use stored execution price
                 commission_exit = exit_price * qty * commission_rate  # Use actual exit price with slippage
                 pnl_currency = (exit_price - entry_price) * qty - commission_entry - commission_exit
+                pnl_currency *= 5
                 # Calculate P&L% based on position value (TradingView standard)
                 position_value = entry_price * qty
                 pnl_pct = (pnl_currency / position_value) * 100 if position_value != 0 else 0
@@ -166,6 +163,7 @@ def run_single_backtest_future(strategy, df, params, symbol, timeframe,
                 commission_exit = exit_price * qty * commission_rate  # Use actual exit price with slippage
                 pnl_currency = (entry_price - exit_price) * qty - commission_entry - commission_exit
                 # Calculate P&L% based on position value (TradingView standard)
+                pnl_currency *= 5
                 position_value = entry_price * qty
                 pnl_pct = (pnl_currency / position_value) * 100 if position_value != 0 else 0
                 trades.append({
@@ -189,9 +187,9 @@ def run_single_backtest_future(strategy, df, params, symbol, timeframe,
                 if desired_position != 0:
                     # Apply tick slippage for entry based on position direction
                     if desired_position > 0:  # Long entry
-                        execution_price = base_execution_price - 0.25 * tick_slippage
-                    else:  # Short entry
                         execution_price = base_execution_price + 0.25 * tick_slippage
+                    else:  # Short entry
+                        execution_price = base_execution_price - 0.25 * tick_slippage
                     
                     # Use fixed order size (quantity)
                     position_qty = order_size
@@ -216,7 +214,6 @@ def run_single_backtest_future(strategy, df, params, symbol, timeframe,
             df.loc[df.index[i+1], 'equity'] = equity_curr
             df.loc[df.index[i+1], 'position'] = position
             df.loc[df.index[i+1], 'trades'] = len(trades)
-        df.to_csv(f'df_{params["length"]}_{params["oversold"]}_{params["overbought"]}.csv')
     except Exception as e:
         print ("E", e)
     # Handle any remaining open position at the end
@@ -321,14 +318,15 @@ def run_single_backtest_future(strategy, df, params, symbol, timeframe,
     # Number of trades
     num_trades = len(trades)
 
-    print (f"Backtest result:\n Final Equity: {final_equity} \n Max Drawdown: {equity_dd_pct:.2f}% \n Num trades: {num_trades}")
-    print (f"Profit: {profit} ({profit_pct}%)")
-    print (f"Weeks Tested: {weeks_tested}, Avg Trades/Week: {avg_trades_per_week}")
-    print (f"Expected Payoff: {expected_payoff}, Profit Factor: {profit_factor}")
-    print (f"Recovery Factor: {recovery_factor}, Sharpe Ratio: {sharpe_ratio}")
+    # print (f"Backtest result:\n Final Equity: {final_equity} \n Max Drawdown: {equity_dd_pct:.2f}% \n Num trades: {num_trades}")
+    # print (f"Parameters: {params}")
+    # print (f"Profit: {profit} ({profit_pct}%)")
+    # print (f"Weeks Tested: {weeks_tested}, Avg Trades/Week: {avg_trades_per_week}")
+    # print (f"Expected Payoff: {expected_payoff}, Profit Factor: {profit_factor}")
+    # print (f"Recovery Factor: {recovery_factor}, Sharpe Ratio: {sharpe_ratio}")
     
-    if trades:
-        print (trades[0])
+    # if trades:
+    #     print (trades[0])
     
     if equity_dd_pct > (0.18 * 100):
         return
