@@ -4,7 +4,6 @@ import csv
 import datetime
 import pandas as pd
 import threading
-from src.config import OPTIMIZATION_CONFIG
 
 # Global lock for thread-safe file writing
 file_write_lock = threading.Lock()
@@ -13,9 +12,19 @@ file_write_lock = threading.Lock()
 data_cache = {}
 data_cache_lock = threading.Lock()
 
-def load_data(exchange, trading_pair, timeframe):
+def timeframe_to_pandas_rule(tf):
+    if tf.endswith('m'):
+        return f"{int(tf[:-1])}min"
+    elif tf.endswith('h'):
+        return f"{int(tf[:-1])}h"  # Fixed: changed 'H' to 'h' to avoid deprecation warning
+    elif tf.endswith('d'):
+        return f"{int(tf[:-1])}D"
+    else:
+        raise ValueError(f"Unsupported timeframe: {tf}")
+
+def load_data_future(symbol, timeframe):
     # Create a cache key
-    cache_key = f"{exchange}_{trading_pair}_{timeframe}"
+    cache_key = f"{symbol}_{timeframe}"
     
     # Check if data is already cached
     with data_cache_lock:
@@ -23,25 +32,17 @@ def load_data(exchange, trading_pair, timeframe):
             return data_cache[cache_key].copy()  # Return a copy to avoid modifications
     
     # Load data if not cached
-    csv_path = f'data/{exchange}_{trading_pair.replace("/", "_")}.csv'.lower()
+    csv_path = f'data/future/{symbol}.csv'
     df = pd.read_csv(csv_path)
 
+    if 'ts_event' in df.columns:
+        df = df.rename(columns={'ts_event': 'timestamp'})
     if 'timestamp' in df.columns:
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         df = df.sort_values('timestamp')
         df = df.set_index('timestamp')
     else:
         raise ValueError("CSV must contain a 'timestamp' column.")
-
-    def timeframe_to_pandas_rule(tf):
-        if tf.endswith('m'):
-            return f"{int(tf[:-1])}min"
-        elif tf.endswith('h'):
-            return f"{int(tf[:-1])}h"  # Fixed: changed 'H' to 'h' to avoid deprecation warning
-        elif tf.endswith('d'):
-            return f"{int(tf[:-1])}D"
-        else:
-            raise ValueError(f"Unsupported timeframe: {tf}")
 
     resample_rule = timeframe_to_pandas_rule(timeframe)
 
@@ -60,43 +61,44 @@ def load_data(exchange, trading_pair, timeframe):
     
     return resampled_df
 
-
-def simulate_backtest(strategy, exchange, trading_pair, timeframe, single_params=None, initial_capital=10000, commission_rate=0.0006, position_fraction=0.10):
-    """
-    Run backtest for a strategy with a single parameter set.
+def simulate_backtest_future(strategy, symbol, timeframe, single_params=None, initial_capital=100000, commission_rate=0.0006, order_size=1.0, tick_slippage=2):
+    df = load_data_future(symbol, timeframe)
     
-    Args:
-        strategy: Strategy instance
-        exchange: Exchange name
-        trading_pair: Trading pair
-        timeframe: Timeframe
-        single_params: Single parameter dictionary to test. If None, uses strategy.suggest_parameters()
-        initial_capital: Initial capital
-        commission_rate: Commission rate
-        position_fraction: Position fraction
-    """
-    df = load_data(exchange, trading_pair, timeframe)
-    
-    # If no parameters provided, use default parameters (fallback)
     if single_params is None:
         single_params = strategy.suggest_parameters()
     
     print ("-" * 50)
-    print (f"Backtesting {strategy.name} on {exchange} {trading_pair} {timeframe}")
+    print (f"Backtesting {strategy.name} on {symbol} {timeframe}")
     print (f"Parameters: {single_params}")
     
-    # Run single backtest with these parameters
-    run_single_backtest(strategy, df, single_params, exchange, trading_pair, timeframe, 
-                       initial_capital, commission_rate, position_fraction)
+    try:
+        # Run single backtest with these parameters
+        run_single_backtest_future(strategy, df, single_params, symbol, timeframe, 
+                        initial_capital, commission_rate, order_size, tick_slippage)
+    except Exception as e:
+        print (f"Error: {e}")
+        return
 
-
-def run_single_backtest(strategy, df, params, exchange, trading_pair, timeframe, 
-                       initial_capital=10000, commission_rate=0.0006, position_fraction=0.10):
+def run_single_backtest_future(strategy, df, params, symbol, timeframe, 
+                       initial_capital=100000, commission_rate=0.0006, order_size=1.0, tick_slippage=2):
     """
     Run a single backtest with specific parameters.
     
     This function contains the core backtesting logic.
+    
+    Args:
+        tick_slippage: Number of ticks of slippage to apply (default 2 ticks)
+                      Applied unfavorably to all trades:
+                      - Long entries: pay higher by tick_slippage ticks
+                      - Long exits: receive lower by tick_slippage ticks  
+                      - Short entries: receive lower by tick_slippage ticks
+                      - Short exits: pay higher by tick_slippage ticks
     """
+    
+    params["length"] = 5
+    params["oversold"] = 20
+    params["overbought"] = 60
+    
     # Prepare the dataframe with strategy indicators
     df = strategy.prepare(df.copy(), params)
     df['position'] = 0
@@ -116,108 +118,107 @@ def run_single_backtest(strategy, df, params, exchange, trading_pair, timeframe,
     # Get warmup period to avoid trading during indicator stabilization
     warmup_period = strategy.warmup_period(params)
 
-    for i in range(warmup_period, length - 1):
-        # Use current bar's close for decision and next bar's open for execution (realistic timing)
-        decision_price = df['close'].iloc[i]  # Price available for decision
-        execution_price = df['open'].iloc[i+1]  # Actual execution price (next bar open)
-        
-        # Get desired position from strategy
-        desired_position = strategy.decide_position(df, i, position, params)
-        
-        equity_prev = df['equity'].iloc[i] if i >= 0 else float(initial_capital)
-        equity_curr = equity_prev
+    try:
+        for i in range(warmup_period, length - 1):
+            base_execution_price = df['open'].iloc[i+1]  # Base execution price (next bar open)
+            
+            # Get desired position from strategy
+            desired_position = strategy.decide_position(df, i, position, params)
+            
+            equity_prev = df['equity'].iloc[i] if i >= 0 else float(initial_capital)
+            equity_curr = equity_prev
 
-        # If changing position, close existing one first
-        if position > 0 and desired_position <= 0:
-            # Use execution price directly
-            exit_price = execution_price
-            qty = position_qty
-            # Calculate commission on execution price
-            commission_entry = entry_execution_price * qty * commission_rate  # Use stored execution price
-            commission_exit = execution_price * qty * commission_rate  # Use base execution price
-            pnl_currency = (exit_price - entry_price) * qty - commission_entry - commission_exit
-            # Calculate P&L% based on position value (TradingView standard)
-            position_value = entry_price * qty
-            pnl_pct = (pnl_currency / position_value) * 100 if position_value != 0 else 0
-            trades.append({
-                'type': 'long_exit',
-                'entry': entry_price,
-                'exit': exit_price,
-                'qty': qty,
-                'pnl_currency': pnl_currency,
-                'pnl_pct': pnl_pct,
-                'commission_entry': commission_entry,
-                'commission_exit': commission_exit,
-                'size_fraction': position_fraction,
-                'timestamp': df.index[i]
-            })
-            equity_curr = equity_prev + pnl_currency
-            entry_price = 0
-            entry_execution_price = 0
-            position_qty = 0.0
-        elif position < 0 and desired_position >= 0:
-            # Use execution price directly
-            exit_price = execution_price
-            qty = position_qty
-            # Calculate commission on execution price
-            commission_entry = entry_execution_price * qty * commission_rate  # Use stored execution price
-            commission_exit = execution_price * qty * commission_rate  # Use base execution price
-            pnl_currency = (entry_price - exit_price) * qty - commission_entry - commission_exit
-            # Calculate P&L% based on position value (TradingView standard)
-            position_value = entry_price * qty
-            pnl_pct = (pnl_currency / position_value) * 100 if position_value != 0 else 0
-            trades.append({
-                'type': 'short_exit',
-                'entry': entry_price,
-                'exit': exit_price,
-                'qty': qty,
-                'pnl_currency': pnl_currency,
-                'pnl_pct': pnl_pct,
-                'commission_entry': commission_entry,
-                'commission_exit': commission_exit,
-                'size_fraction': position_fraction,
-                'timestamp': df.index[i]
-            })
-            equity_curr = equity_prev + pnl_currency
-            entry_price = 0
-            entry_execution_price = 0
-            position_qty = 0.0
+            # If changing position, close existing one first
+            if position > 0 and desired_position <= 0:
+                # Apply tick slippage for long exit (unfavorable = lower price)
+                exit_price = base_execution_price + 0.25 * tick_slippage
+                qty = position_qty
+                # Calculate commission on execution price
+                commission_entry = entry_execution_price * qty * commission_rate  # Use stored execution price
+                commission_exit = exit_price * qty * commission_rate  # Use actual exit price with slippage
+                pnl_currency = (exit_price - entry_price) * qty - commission_entry - commission_exit
+                # Calculate P&L% based on position value (TradingView standard)
+                position_value = entry_price * qty
+                pnl_pct = (pnl_currency / position_value) * 100 if position_value != 0 else 0
 
-        if desired_position != position:
-            if desired_position != 0:
-                # Calculate position size accounting for commission fees
-                # Available capital for this trade
-                available_capital = equity_curr * position_fraction
-                
-                # Account for commission: total_cost = position_qty * execution_price * (1 + commission_rate)
-                # Solve for position_qty: position_qty = available_capital / (execution_price * (1 + commission_rate))
-                if execution_price != 0:
-                    position_qty = available_capital / (execution_price * (1 + commission_rate))
-                else:
-                    position_qty = 0.0
-                
-                # Use execution price directly
-                entry_execution_price = execution_price
-                entry_price = execution_price
-                
-                # Ensure minimum position size and round to reasonable precision
-                # Check minimum position including commission
-                total_cost = position_qty * execution_price * (1 + commission_rate)
-                if total_cost < 1.0:  # Minimum $1 total cost (including commission)
-                    position_qty = 0.0
-                    desired_position = 0
-                else:
-                    position_qty = round(position_qty, 8)  # Round to 8 decimal places
-            else:
+                trades.append({
+                    'type': 'long_exit',
+                    'entry': entry_price,
+                    'exit': exit_price,
+                    'qty': qty,
+                    'pnl_currency': pnl_currency,
+                    'pnl_pct': pnl_pct,
+                    'commission_entry': commission_entry,
+                    'commission_exit': commission_exit,
+                    'order_size': order_size,
+                    'timestamp': df.index[i]
+                })
+                equity_curr = equity_prev + pnl_currency
                 entry_price = 0
+                entry_execution_price = 0
                 position_qty = 0.0
-                
-            position = desired_position
+            elif position < 0 and desired_position >= 0:
+                # Apply tick slippage for short exit (unfavorable = higher price)
+                exit_price = base_execution_price + 0.25 * tick_slippage
+                qty = position_qty
+                # Calculate commission on execution price
+                commission_entry = entry_execution_price * qty * commission_rate  # Use stored execution price
+                commission_exit = exit_price * qty * commission_rate  # Use actual exit price with slippage
+                pnl_currency = (entry_price - exit_price) * qty - commission_entry - commission_exit
+                # Calculate P&L% based on position value (TradingView standard)
+                position_value = entry_price * qty
+                pnl_pct = (pnl_currency / position_value) * 100 if position_value != 0 else 0
+                trades.append({
+                    'type': 'short_exit',
+                    'entry': entry_price,
+                    'exit': exit_price,
+                    'qty': qty,
+                    'pnl_currency': pnl_currency,
+                    'pnl_pct': pnl_pct,
+                    'commission_entry': commission_entry,
+                    'commission_exit': commission_exit,
+                    'order_size': order_size,
+                    'timestamp': df.index[i]
+                })
+                equity_curr = equity_prev + pnl_currency
+                entry_price = 0
+                entry_execution_price = 0
+                position_qty = 0.0
 
-        df.loc[df.index[i+1], 'equity'] = equity_curr
-        df.loc[df.index[i+1], 'position'] = position
-        df.loc[df.index[i+1], 'trades'] = len(trades)
+            if desired_position != position:
+                if desired_position != 0:
+                    # Apply tick slippage for entry based on position direction
+                    if desired_position > 0:  # Long entry
+                        execution_price = base_execution_price - 0.25 * tick_slippage
+                    else:  # Short entry
+                        execution_price = base_execution_price + 0.25 * tick_slippage
+                    
+                    # Use fixed order size (quantity)
+                    position_qty = order_size
+                    
+                    # Store execution prices for later use
+                    entry_execution_price = execution_price
+                    entry_price = execution_price
+                    
+                    # Check if we have enough capital for this trade
+                    total_cost = position_qty * execution_price * (1 + commission_rate)
+                    if total_cost > equity_curr:  # Not enough capital
+                        position_qty = 0.0
+                        desired_position = 0
+                    else:
+                        position_qty = round(position_qty, 8)  # Round to 8 decimal places
+                else:
+                    entry_price = 0
+                    position_qty = 0.0
+                    
+                position = desired_position
 
+            df.loc[df.index[i+1], 'equity'] = equity_curr
+            df.loc[df.index[i+1], 'position'] = position
+            df.loc[df.index[i+1], 'trades'] = len(trades)
+        df.to_csv(f'df_{params["length"]}_{params["oversold"]}_{params["overbought"]}.csv')
+    except Exception as e:
+        print ("E", e)
     # Handle any remaining open position at the end
     if position != 0 and position_qty > 0:
         final_price = df['close'].iloc[-1]
@@ -246,7 +247,7 @@ def run_single_backtest(strategy, df, params, exchange, trading_pair, timeframe,
             'pnl_pct': final_pnl_pct,
             'commission_entry': commission_entry,
             'commission_exit': commission_exit,
-            'size_fraction': position_fraction,
+            'order_size': order_size,
             'timestamp': df.index[-1]
         })
         
@@ -320,21 +321,21 @@ def run_single_backtest(strategy, df, params, exchange, trading_pair, timeframe,
     # Number of trades
     num_trades = len(trades)
 
-    # print (f"Backtest result:\n Final Equity: {final_equity} \n Max Drawdown: {equity_dd_pct:.2f}% \n Num trades: {num_trades}")
-    # print (f"Profit: {profit} ({profit_pct}%)")
-    # print (f"Weeks Tested: {weeks_tested}, Avg Trades/Week: {avg_trades_per_week}")
-    # print (f"Expected Payoff: {expected_payoff}, Profit Factor: {profit_factor}")
-    # print (f"Recovery Factor: {recovery_factor}, Sharpe Ratio: {sharpe_ratio}")
+    print (f"Backtest result:\n Final Equity: {final_equity} \n Max Drawdown: {equity_dd_pct:.2f}% \n Num trades: {num_trades}")
+    print (f"Profit: {profit} ({profit_pct}%)")
+    print (f"Weeks Tested: {weeks_tested}, Avg Trades/Week: {avg_trades_per_week}")
+    print (f"Expected Payoff: {expected_payoff}, Profit Factor: {profit_factor}")
+    print (f"Recovery Factor: {recovery_factor}, Sharpe Ratio: {sharpe_ratio}")
     
-    # if trades:
-    #     print (trades[0])
+    if trades:
+        print (trades[0])
     
-    if equity_dd_pct > (OPTIMIZATION_CONFIG['max_drawdown_limit'] * 100):
+    if equity_dd_pct > (0.18 * 100):
         return
     if final_equity <= initial_capital:
         return
 
-    result_dir = "result"
+    result_dir = "result/future"
     os.makedirs(result_dir, exist_ok=True)
     
     # Create params_str for filename and CSV content
@@ -349,7 +350,7 @@ def run_single_backtest(strategy, df, params, exchange, trading_pair, timeframe,
         with open(result_filename, mode='a', newline='') as csvfile:
             # Write headers if file doesn't exist
             if not file_exists:
-                headers = ['Exchange', 'Trading_Pair', 'Timeframe'] + [
+                headers = ['Symbol', 'Timeframe'] + [
                     'Weeks_Tested', 'Avg_Trades_Per_Week', 'Profit', 
                     'Expected_Payoff', 'Profit_Factor', 'Recovery_Factor', 
                     'Sharpe_Ratio', 'Max Equity_DD_%', 'Trades'
@@ -357,7 +358,7 @@ def run_single_backtest(strategy, df, params, exchange, trading_pair, timeframe,
                 csvfile.write(','.join(headers) + '\n')
             
             # Write data row
-            csv_content = f'{exchange},{trading_pair},{timeframe}'
+            csv_content = f'{symbol},{timeframe}'
             csv_content += f',{weeks_tested:.2f},{avg_trades_per_week:.2f},{profit:.2f}'
             csv_content += f',{expected_payoff:.2f},{profit_factor:.2f},{recovery_factor:.2f},{sharpe_ratio:.2f}'
             csv_content += f',{equity_dd_pct:.2f},{num_trades}'

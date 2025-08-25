@@ -134,6 +134,10 @@ cache/
 data/
 control/
 result/
+orderbook_data/
+crypto_data/
+stock_data/
+future_data/
 *.parquet
 *.xlsx
 *.json
